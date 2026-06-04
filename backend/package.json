@@ -12,6 +12,6 @@
     "express": "^4.18.2",
     "node-fetch": "^2.6.7",
     "dotenv": "^16.0.3",
-    "html-parser": "^1.8.0"
+    "node-html-parser": "^6.1.0"
   }
 }

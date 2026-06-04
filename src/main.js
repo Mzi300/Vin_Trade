@@ -1,85 +1,16 @@
 ﻿const data = {
-  summary: [
-    { title: 'Total P&L', value: '+$18.4K', change: '+12.3%' },
-    { title: 'Active Trades', value: '7', change: '+2' },
-    { title: 'Win Rate', value: '68%', change: '+5.1%' },
-    { title: 'Market Pulse', value: 'USD Strength', change: 'Neutral' },
-  ],
-  monitors: [
-    { label: 'EUR/USD', price: '1.0832', trend: 'Bullish', change: '+0.24%' },
-    { label: 'GBP/USD', price: '1.2631', trend: 'Bullish', change: '+0.18%' },
-    { label: 'USD/JPY', price: '151.21', trend: 'Consolidating', change: '-0.08%' },
-    { label: 'USD/ZAR', price: '18.79', trend: 'Strong USD', change: '+0.62%' },
-  ],
-  signals: [
-    {
-      title: 'USD Strength',
-      value: '88 / 100',
-      note: 'Dollar momentum remains the strongest among majors.',
-      strengths: 'US growth momentum and higher real yields continue to support the greenback, while risk aversion keeps safe-haven demand elevated.',
-      risks: 'A dovish Fed pivot or softer US macro data could quickly unwind the USD strength narrative, especially versus EUR and GBP.',
-      volatility: 'USD moves are sensitive to inflation prints and Fed policy cues, making short-term swings likely around FOMC and NFP releases.',
-      isNew: true,
-    },
-    {
-      title: 'EUR Risk',
-      value: '64 / 100',
-      note: 'Euro price action is range-bound ahead of ECB.',
-      strengths: 'Inflation in the euro area has remained sticky, which keeps ECB tightening expectations alive and supports the currency.',
-      risks: 'Weaker growth signals and political uncertainty in the bloc could pressure the EUR and widen downside risk.',
-      volatility: 'EUR is likely to react strongly to ECB guidance and eurozone PMI data, creating higher intraday ranges.',
-      isNew: true,
-    },
-    {
-      title: 'JPY Volatility',
-      value: '57 / 100',
-      note: 'BoJ rhetoric keeps JPY muted in the near term.',
-      strengths: 'The Bank of Japan’s cautious stance and yield curve control support a stable JPY, while safe-haven demand remains relevant.',
-      risks: 'A surprise shift toward tighter BoJ policy or a stronger risk-off move could trigger renewed JPY appreciation.',
-      volatility: 'JPY pairs are prone to sharp moves around BoJ commentary and USD/JPY positioning, especially when global risk sentiment changes.',
-      isNew: false,
-    },
-  ],
-  watchlist: [
-    { pair: 'USD/CAD', target: '1.3640', status: 'Bullish' },
-    { pair: 'AUD/USD', target: '0.6505', status: 'Neutral' },
-    { pair: 'NZD/USD', target: '0.5980', status: 'Monitor' },
-  ],
-  news: [
-    { title: 'Fed minutes due today', detail: 'Focus on rate-hike persistence and growth signal.' },
-    { title: 'ECB statement preview', detail: 'ECB to discuss inflation outlook and policy path.' },
-    { title: 'South African rand watch', detail: 'USD/ZAR remains sensitive to EM risk flows.' },
-  ],
-  chart: {
-    pair: 'EUR/USD',
-    label: '1 Month History',
-  },
+  summary: [],
+  monitors: [],
+  signals: [],
+  watchlist: [],
+  news: [],
+  chart: {},
 };
 
 let liveDataAvailable = false;
+let loadingLiveData = true;
 
-const chartSeries = {
-  'EUR/USD': {
-    label: '1 Month History',
-    points: [1.0792, 1.0810, 1.0801, 1.0834, 1.0851, 1.0840, 1.0868, 1.0882, 1.0870, 1.0894, 1.0915, 1.0932, 1.0921, 1.0903, 1.0888, 1.0860, 1.0845, 1.0821, 1.0806, 1.0794, 1.0816, 1.0830, 1.0824, 1.0808, 1.0789, 1.0774, 1.0758, 1.0769, 1.0782, 1.0798],
-    labels: ['May 03', 'May 04', 'May 05', 'May 06', 'May 07', 'May 08', 'May 09', 'May 10', 'May 11', 'May 12', 'May 13', 'May 14', 'May 15', 'May 16', 'May 17', 'May 18', 'May 19', 'May 20', 'May 21', 'May 22', 'May 23', 'May 24', 'May 25', 'May 26', 'May 27', 'May 28', 'May 29', 'May 30', 'May 31', 'Jun 01'],
-  },
-  'GBP/USD': {
-    label: '1 Month History',
-    points: [1.2593, 1.2605, 1.2610, 1.2624, 1.2630, 1.2638, 1.2645, 1.2639, 1.2648, 1.2655, 1.2663, 1.2657, 1.2669, 1.2678, 1.2684, 1.2672, 1.2665, 1.2659, 1.2650, 1.2643, 1.2638, 1.2634, 1.2631, 1.2629, 1.2624, 1.2620, 1.2615, 1.2621, 1.2628, 1.2631],
-    labels: ['May 03', 'May 04', 'May 05', 'May 06', 'May 07', 'May 08', 'May 09', 'May 10', 'May 11', 'May 12', 'May 13', 'May 14', 'May 15', 'May 16', 'May 17', 'May 18', 'May 19', 'May 20', 'May 21', 'May 22', 'May 23', 'May 24', 'May 25', 'May 26', 'May 27', 'May 28', 'May 29', 'May 30', 'May 31', 'Jun 01'],
-  },
-  'USD/JPY': {
-    label: '1 Month History',
-    points: [150.12, 150.35, 150.55, 150.72, 150.90, 151.05, 151.22, 151.15, 151.18, 151.25, 151.30, 151.18, 151.05, 150.94, 150.78, 150.64, 150.51, 150.38, 150.25, 150.13, 150.21, 150.34, 150.48, 150.57, 150.66, 150.78, 150.91, 151.02, 151.10, 151.21],
-    labels: ['May 03', 'May 04', 'May 05', 'May 06', 'May 07', 'May 08', 'May 09', 'May 10', 'May 11', 'May 12', 'May 13', 'May 14', 'May 15', 'May 16', 'May 17', 'May 18', 'May 19', 'May 20', 'May 21', 'May 22', 'May 23', 'May 24', 'May 25', 'May 26', 'May 27', 'May 28', 'May 29', 'May 30', 'May 31', 'Jun 01'],
-  },
-  'USD/ZAR': {
-    label: '1 Month History',
-    points: [18.23, 18.31, 18.36, 18.41, 18.45, 18.52, 18.55, 18.59, 18.62, 18.66, 18.69, 18.70, 18.72, 18.74, 18.77, 18.79, 18.81, 18.83, 18.84, 18.86, 18.88, 18.90, 18.92, 18.94, 18.96, 18.98, 19.00, 18.99, 18.96, 18.79],
-    labels: ['May 03', 'May 04', 'May 05', 'May 06', 'May 07', 'May 08', 'May 09', 'May 10', 'May 11', 'May 12', 'May 13', 'May 14', 'May 15', 'May 16', 'May 17', 'May 18', 'May 19', 'May 20', 'May 21', 'May 22', 'May 23', 'May 24', 'May 25', 'May 26', 'May 27', 'May 28', 'May 29', 'May 30', 'May 31', 'Jun 01'],
-  },
-};
+const chartSeries = {};
 
 // API base (can be overridden by setting window.VINTRADE_API_URL)
 const API_BASE = (window.VINTRADE_API_URL || '/api/v1').replace(/\/$/, '');
@@ -179,16 +110,24 @@ const buildTrendingSignalsFromArticles = (articles) => {
 };
 
 const fetchLiveData = async () => {
+  loadingLiveData = true;
+  updateTab();
+
   try {
     const res = await fetch(LIVE_ENDPOINT);
     if (!res.ok) return false;
-    const payload = await res.json();
+    if (res.status === 204 || res.headers.get('content-length') === '0') return false;
+    const text = await res.text();
+    if (!text.trim()) return false;
+    const payload = JSON.parse(text);
     if (!payload || typeof payload !== 'object') return false;
-    if (Array.isArray(payload.summary)) data.summary = payload.summary;
-    if (Array.isArray(payload.monitors)) data.monitors = payload.monitors;
-    if (Array.isArray(payload.signals)) data.signals = payload.signals;
-    if (Array.isArray(payload.watchlist)) data.watchlist = payload.watchlist;
-    if (Array.isArray(payload.news)) data.news = payload.news;
+
+    data.summary = Array.isArray(payload.summary) ? payload.summary : [];
+    data.monitors = Array.isArray(payload.monitors) ? payload.monitors : [];
+    data.signals = Array.isArray(payload.signals) ? payload.signals : [];
+    data.watchlist = Array.isArray(payload.watchlist) ? payload.watchlist : [];
+    data.news = Array.isArray(payload.news) ? payload.news : [];
+
     if (payload.chart && typeof payload.chart === 'object') {
       data.chart = Object.assign({}, data.chart, payload.chart);
     }
@@ -197,11 +136,18 @@ const fetchLiveData = async () => {
         chartSeries[pair] = payload.chartSeries[pair];
       });
     }
-    liveDataAvailable = true;
-    return true;
+
+    activePair = data.chart.pair || data.monitors[0]?.pair || null;
+    activeSignal = data.signals[0]?.title || activeSignal;
+    chartRangeStart = 0;
+    liveDataAvailable = !!data.monitors.length;
+    return liveDataAvailable;
   } catch (err) {
     console.warn('fetchLiveData error', err);
     return false;
+  } finally {
+    loadingLiveData = false;
+    updateTab();
   }
 };
 
@@ -241,10 +187,10 @@ const fetchAlertsFromBackend = async () => {
 
 const tabs = ['Overview', 'Markets', 'Signals', 'Insights'];
 let activeTab = 'Overview';
-let activePair = data.chart.pair;
+let activePair = data.chart.pair || null;
 let activeSignal = data.signals[0]?.title || null;
 const chartWindowSize = 10;
-let chartRangeStart = Math.max(0, chartSeries[activePair].points.length - chartWindowSize);
+let chartRangeStart = 0;
 const app = document.getElementById('app');
 const CHAT_KEY = 'vintrade_chat';
 const CHAT_BACKUP_KEY = 'vintrade_chat_backup';
@@ -286,6 +232,18 @@ const showUndoTemporary = () => {
   }, UNDO_TIMEOUT);
 };
 
+const formatPriceValue = (value) => {
+  if (value === undefined || value === null || Number.isNaN(Number(value))) return '--';
+  const number = Number(value);
+  return number.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 6 });
+};
+
+const formatPercent = (value) => {
+  if (value === undefined || value === null || Number.isNaN(Number(value))) return '--';
+  const number = Number(value);
+  return `${number >= 0 ? '+' : ''}${number.toFixed(2)}%`;
+};
+
 const renderCards = (items) => items
   .map((item) => `
     <article class="metric-card">
@@ -299,14 +257,20 @@ const renderCards = (items) => items
   .join('');
 
 const renderMonitors = (items) => items
-  .map((item) => `
-    <tr class="market-row${item.label === activePair ? ' active' : ''}" data-pair="${item.label}">
-      <td>${item.label}</td>
-      <td>${item.price}</td>
-      <td>${item.trend}</td>
-      <td>${item.change}</td>
-    </tr>
-  `)
+  .map((item) => {
+    const pair = item.pair || item.label || '--';
+    const trend = item.trend || (typeof item.change_24h === 'number'
+      ? (item.change_24h > 0.05 ? 'Up' : item.change_24h < -0.05 ? 'Down' : 'Neutral')
+      : 'N/A');
+    return `
+      <tr class="market-row${pair === activePair ? ' active' : ''}" data-pair="${pair}">
+        <td>${pair}</td>
+        <td>${formatPriceValue(item.price)}</td>
+        <td>${trend}</td>
+        <td>${formatPercent(item.change_24h)}</td>
+      </tr>
+    `;
+  })
   .join('');
 
 const renderSignals = (items) => items
@@ -403,7 +367,7 @@ const renderChat = () => chatState
 const estimateConfidence = (pair) => {
   if (!pair) return 'low';
   if (chartSeries[pair] && chartSeries[pair].points.length > 8) return 'medium';
-  if (data.monitors.find((m) => m.label === pair)) return 'low';
+  if (data.monitors.find((m) => m.pair === pair || m.label === pair)) return 'low';
   return 'low';
 };
 
@@ -475,7 +439,7 @@ const generateDetailedReply = (text) => {
 
   if (pairCode) {
     const result = [];
-    const monitor = data.monitors.find((m) => m.label === pairCode);
+    const monitor = data.monitors.find((m) => m.pair === pairCode || m.label === pairCode);
     const series = chartSeries[pairCode];
 
     // Market Overview
@@ -559,9 +523,9 @@ const sendMessage = (raw) => {
   if (input) input.value = '';
 };
 
-const getCurrentChart = () => chartSeries[activePair];
+const getCurrentChart = () => chartSeries[activePair] || { points: [], labels: [] };
 
-const getChartSummary = () => data.monitors.find((item) => item.label === activePair) || { price: '--', change: '--' };
+const getChartSummary = () => data.monitors.find((item) => item.pair === activePair || item.label === activePair) || { price: '--', change_24h: null };
 
 const getVisibleChartData = () => {
   const current = getCurrentChart();
@@ -577,8 +541,9 @@ const getChartRangeLimit = () => Math.max(0, getCurrentChart().points.length - c
 
 const getChartRangeLabel = () => {
   const current = getCurrentChart();
-  const startLabel = current.labels[chartRangeStart];
-  const endLabel = current.labels[Math.min(chartRangeStart + chartWindowSize - 1, current.labels.length - 1)];
+  if (!current.labels || !current.labels.length) return 'No chart range';
+  const startLabel = current.labels[chartRangeStart] || current.labels[0];
+  const endLabel = current.labels[Math.min(chartRangeStart + chartWindowSize - 1, current.labels.length - 1)] || current.labels[current.labels.length - 1];
   return `${startLabel} — ${endLabel}`;
 };
 
@@ -610,27 +575,33 @@ const getChartSvg = () => {
   const current = getCurrentChart();
   const visible = getVisibleChartData();
   const points = visible.points;
+
+  if (!points.length) {
+    return `<div class="chart-empty">No chart data available for ${activePair || 'the selected pair'}.</div>`;
+  }
+
   const min = Math.min(...current.points);
   const max = Math.max(...current.points);
+  const span = max === min ? min + 1 : max - min;
   const step = width / (points.length - 1);
   const svgPoints = points
     .map((value, index) => {
       const x = index * step;
-      const y = height - ((value - min) / (max - min)) * height;
+      const y = height - ((value - min) / span) * height;
       return `${x},${y}`;
     })
     .join(' ');
   const bars = points
     .map((value, index) => {
       const x = index * step - step * 0.24;
-      const barHeight = ((value - min) / (max - min)) * height;
+      const barHeight = ((value - min) / span) * height;
       const y = height - barHeight;
       return `<rect x="${x}" y="${y}" width="${step * 0.48}" height="${barHeight}" rx="8" ry="8" />`;
     })
     .join('');
 
   return `
-    <svg class="market-chart" viewBox="0 0 ${width} ${height}" aria-label="${activePair} chart">
+    <svg class="market-chart" viewBox="0 0 ${width} ${height}" aria-label="${activePair || 'forex'} chart">
       <defs>
         <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.55" />
@@ -646,7 +617,7 @@ const getChartSvg = () => {
       <path d="M ${svgPoints}" fill="none" stroke="#38bdf8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
       <polygon points="${svgPoints} ${width},${height} 0,${height}" fill="url(#chartGradient)" opacity="0.45" />
       ${points.map((value, index) => `
-        <circle cx="${index * step}" cy="${height - ((value - min) / (max - min)) * height}" r="4" fill="#ffffff" stroke="#2563eb" stroke-width="2" />
+        <circle cx="${index * step}" cy="${height - ((value - min) / span) * height}" r="4" fill="#ffffff" stroke="#2563eb" stroke-width="2" />
       `).join('')}
     </svg>
   `;
@@ -655,10 +626,11 @@ const getChartSvg = () => {
 const renderChartPanel = () => {
   const chartWrapper = document.getElementById('chart-wrapper');
   if (!chartWrapper) return;
+  const visible = getVisibleChartData();
   chartWrapper.innerHTML = `
     ${getChartSvg()}
     <div class="chart-labels">
-      ${getVisibleChartData().labels.map((label) => `<span>${label}</span>`).join('')}
+      ${visible.labels.map((label) => `<span>${label}</span>`).join('')}
     </div>
     <div class="chart-tip">Drag the chart to view older data from the last month or use the range controls below.</div>
   `;
@@ -666,8 +638,28 @@ const renderChartPanel = () => {
 };
 
 const renderTabContent = () => {
-  if (!liveDataAvailable) {
-    return '';
+  if (loadingLiveData) {
+    return `
+      <section class="panel empty-state">
+        <div class="panel-title">
+          <h2>Waiting for market data...</h2>
+          <span>Loading real-time forex data from Twelve Data or Alpha Vantage.</span>
+        </div>
+        <p>Please wait while VinTrade connects to the configured live data sources.</p>
+      </section>
+    `;
+  }
+
+  if (!liveDataAvailable || !data.monitors.length) {
+    return `
+      <section class="panel empty-state">
+        <div class="panel-title">
+          <h2>Waiting for market data...</h2>
+          <span>No valid forex data is available.</span>
+        </div>
+        <p>The dashboard will populate once the configured currency pairs are served by the live APIs.</p>
+      </section>
+    `;
   }
 
   if (activeTab === 'Markets') {
@@ -680,8 +672,8 @@ const renderTabContent = () => {
               <span>${getCurrentChart().label}</span>
             </div>
             <div class="chart-summary">
-              <strong>${getChartSummary().price}</strong>
-              <small>${getChartSummary().change} Today</small>
+              <strong>${formatPriceValue(getChartSummary().price)}</strong>
+              <small>${formatPercent(getChartSummary().change_24h)} Today</small>
             </div>
           </div>
           <div class="chart-controls-row">

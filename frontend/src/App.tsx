@@ -3,10 +3,44 @@ import React, { useState, useEffect } from 'react';
 import { AdvancedRealTimeChart } from "react-ts-tradingview-widgets";
 
 function App() {
+  const [adminKey, setAdminKey] = useState(localStorage.getItem('admin_key') || '');
+  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('admin_key'));
+
+  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+    const headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-Admin-Key': adminKey,
+      ...(options.headers || {}),
+    };
+    const res = await fetch(url, { ...options, headers });
+    if (res.status === 401) {
+      localStorage.removeItem('admin_key');
+      setIsAuthenticated(false);
+      setAdminKey('');
+      throw new Error('Unauthorized');
+    }
+    return res;
+  };
+
   const [activeTab, setActiveTab] = useState<'workspace' | 'portfolio' | 'review'>('workspace');
 
   // Tab click handlers
   const handleTabClick = (tab: 'workspace' | 'portfolio' | 'review') => () => setActiveTab(tab);
+
+  const TABS: ('workspace' | 'portfolio' | 'review')[] = ['workspace', 'portfolio', 'review'];
+
+  const handleBack = () => {
+    const currentIndex = TABS.indexOf(activeTab);
+    const newIndex = (currentIndex - 1 + TABS.length) % TABS.length;
+    setActiveTab(TABS[newIndex]);
+  };
+
+  const handleForward = () => {
+    const currentIndex = TABS.indexOf(activeTab);
+    const newIndex = (currentIndex + 1) % TABS.length;
+    setActiveTab(TABS[newIndex]);
+  };
 
   const [messages, setMessages] = useState<{role: string, content: string}[]>([]);
   const [input, setInput] = useState('');
@@ -20,12 +54,66 @@ function App() {
   const [trades, setTrades] = useState<any[]>([]);
   const [isLoadingTrades, setIsLoadingTrades] = useState(false);
 
+  // Trade Review Form State
+  const [reviewForm, setReviewForm] = useState({ pair: 'EUR/USD', bias: 'BUY', entry: '', sl: '', tp: '', risk: '1.5' });
+  const [reviewResult, setReviewResult] = useState<any>(null);
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [isSavingTrade, setIsSavingTrade] = useState(false);
+
+  const handleReviewTrade = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsReviewing(true);
+    try {
+      const res = await fetchWithAuth('http://localhost:8000/api/trade-review', {
+        method: 'POST',
+        body: JSON.stringify({
+          pair: reviewForm.pair,
+          bias: reviewForm.bias,
+          entry_price: Number(reviewForm.entry),
+          stop_loss: Number(reviewForm.sl),
+          take_profit: Number(reviewForm.tp),
+          risk_percentage: Number(reviewForm.risk)
+        })
+      });
+      const data = await res.json();
+      setReviewResult(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsReviewing(false);
+    }
+  };
+
+  const handleSaveTrade = async () => {
+    setIsSavingTrade(true);
+    try {
+      await fetchWithAuth('http://localhost:8000/api/trades', {
+        method: 'POST',
+        body: JSON.stringify({
+          currency_pair: reviewForm.pair,
+          bias: reviewForm.bias,
+          entry_price: Number(reviewForm.entry),
+          stop_loss: Number(reviewForm.sl),
+          take_profit: Number(reviewForm.tp),
+          risk_percentage: Number(reviewForm.risk)
+        })
+      });
+      setTrades([]); // clear cache to refetch
+      setActiveTab('portfolio');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSavingTrade(false);
+      setReviewResult(null);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'portfolio' && trades.length === 0) {
       const fetchTrades = async () => {
         try {
           setIsLoadingTrades(true);
-          const res = await fetch('http://localhost:8000/api/portfolio');
+          const res = await fetchWithAuth('http://localhost:8000/api/portfolio');
           const data = await res.json();
           setTrades(data);
         } catch (err) {
@@ -42,7 +130,7 @@ function App() {
     const fetchForexData = async () => {
       try {
         setIsLoadingForex(true);
-        const res = await fetch('http://localhost:8000/api/forex');
+        const res = await fetchWithAuth('http://localhost:8000/api/forex');
         const data = await res.json();
         setForexData(data);
       } catch (err) {
@@ -69,12 +157,8 @@ function App() {
     if (analyzeMatch) {
       const pair = analyzeMatch[1].toUpperCase();
       try {
-        const response = await fetch('http://localhost:8000/api/analysis', {
+        const response = await fetchWithAuth('http://localhost:8000/api/analysis', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
           body: JSON.stringify({ pair })
         });
         
@@ -102,7 +186,7 @@ function App() {
     } else if (/^trending$/i.test(currentInput) || /trend/i.test(currentInput)) {
       // Fetch trade recommendations for all supported pairs
       try {
-        const response = await fetch('http://localhost:8000/api/trending');
+        const response = await fetchWithAuth('http://localhost:8000/api/trending');
         const data = await response.json();
         if (!response.ok) {
           setMessages(prev => [...prev, { role: 'system', content: `⚠️ Error: ${data.error || 'Failed to retrieve trending data.'}` }]);
@@ -116,6 +200,60 @@ function App() {
       setMessages(prev => [...prev, { role: 'system', content: `## Pair:\n${currentInput.toUpperCase()}\n\n## Market Bias:\nNEUTRAL\n\n(Note: Input not recognized. Try "Analyze EUR/USD" or "Trending" for market overview.)` }]);
     }
   };
+
+  const handleRefresh = async () => {
+    if (activeTab === 'workspace') {
+      try {
+        setIsLoadingForex(true);
+        const res = await fetchWithAuth('http://localhost:8000/api/forex');
+        const data = await res.json();
+        setForexData(data);
+      } catch (err) { console.error(err); } finally { setIsLoadingForex(false); }
+    } else if (activeTab === 'portfolio') {
+      try {
+        setIsLoadingTrades(true);
+        const res = await fetchWithAuth('http://localhost:8000/api/portfolio');
+        const data = await res.json();
+        setTrades(data);
+      } catch (err) { console.error(err); } finally { setIsLoadingTrades(false); }
+    }
+  };
+
+
+  if (!isAuthenticated) {
+    const handleLogin = (e: React.FormEvent) => {
+      e.preventDefault();
+      localStorage.setItem('admin_key', adminKey);
+      setIsAuthenticated(true);
+    };
+
+    return (
+      <div className="h-screen w-screen flex flex-col bg-[#121215] text-gray-200 font-sans justify-center items-center">
+        <div className="bg-[#1e1e24] p-8 rounded-lg border border-gray-800 shadow-2xl w-96 max-w-full">
+          <div className="flex justify-center mb-6">
+            <div className="w-12 h-12 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-black text-xl">FX</div>
+          </div>
+          <h2 className="text-2xl font-bold text-center text-white mb-6">Vin Trade Secure</h2>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs text-gray-500 uppercase font-semibold mb-1">Admin Key</label>
+              <input 
+                type="password" 
+                required 
+                value={adminKey} 
+                onChange={e => setAdminKey(e.target.value)} 
+                className="w-full bg-gray-900 border border-gray-700 rounded px-4 py-3 focus:outline-none focus:border-indigo-500 text-gray-200 placeholder-gray-600" 
+                placeholder="Enter master password..."
+              />
+            </div>
+            <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded transition-colors flex justify-center items-center">
+              Unlock Terminal
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#1e1e24] text-gray-200 font-sans overflow-hidden">
@@ -138,12 +276,20 @@ function App() {
         <div className="h-12 bg-gray-800 flex items-center px-4 justify-between">
           <div className="flex items-center gap-4">
             <div className="flex gap-2 text-gray-400">
-              <button className="hover:text-white transition-colors">◀</button>
-              <button className="hover:text-white transition-colors">▶</button>
-              <button className="hover:text-white transition-colors">↻</button>
+              <button 
+                onClick={handleBack} 
+                className="hover:text-white transition-colors cursor-pointer"
+                title="Previous Tab"
+              >◀</button>
+              <button 
+                onClick={handleForward} 
+                className="hover:text-white transition-colors cursor-pointer"
+                title="Next Tab"
+              >▶</button>
+              <button onClick={handleRefresh} className="hover:text-white transition-colors cursor-pointer" title="Refresh Data">↻</button>
             </div>
             <div className="bg-gray-900 border border-gray-700 rounded px-4 py-1.5 text-sm text-gray-400 min-w-[300px] flex items-center gap-2">
-              <span className="text-indigo-500">🔒</span> secure://vin-trade.ai/workspace
+              <span className="text-indigo-500">🔒</span> secure://vin-trade.ai/{activeTab}
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -304,13 +450,126 @@ function App() {
     </div>
   )}
   {activeTab === 'review' && (
-    <div className="p-8 text-center text-gray-200">
-      <h2 className="text-2xl font-semibold mb-4">AI Trade Review</h2>
-      <div className="flex items-start bg-gray-800 border border-gray-600 rounded p-4 text-gray-200">
-        <span className="text-indigo-400 mr-2">ℹ️</span>
-        <div>
-          <p className="font-semibold">Trade review functionality is under development.</p>
-          <p className="text-sm">Use the chat to input trade details; upcoming AI will provide risk analysis and recommendations.</p>
+    <div className="flex-1 p-6 bg-[#1e1e24] overflow-y-auto">
+      <h2 className="text-2xl font-semibold mb-6 text-white">AI Trade Review</h2>
+      
+      <div className="flex gap-6">
+        {/* Left Col: Entry Form */}
+        <div className="w-1/3 bg-gray-900 rounded-lg border border-gray-800 p-6 shadow-2xl">
+          <h3 className="text-lg font-medium text-gray-300 mb-4">Trade Parameters</h3>
+          <form onSubmit={handleReviewTrade} className="space-y-4">
+            
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="block text-xs text-gray-500 uppercase font-semibold mb-1">Pair</label>
+                <select 
+                  value={reviewForm.pair}
+                  onChange={e => setReviewForm({...reviewForm, pair: e.target.value})}
+                  className="w-full bg-[#1e1e24] border border-gray-700 rounded px-3 py-2 text-gray-200 focus:outline-none focus:border-indigo-500"
+                >
+                  <option>EUR/USD</option>
+                  <option>GBP/USD</option>
+                  <option>USD/JPY</option>
+                  <option>AUD/USD</option>
+                  <option>USD/CAD</option>
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs text-gray-500 uppercase font-semibold mb-1">Bias</label>
+                <div className="flex bg-[#1e1e24] rounded border border-gray-700 overflow-hidden">
+                  <button type="button" onClick={() => setReviewForm({...reviewForm, bias: 'BUY'})} className={`flex-1 py-2 text-sm font-bold ${reviewForm.bias === 'BUY' ? 'bg-green-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`}>BUY</button>
+                  <button type="button" onClick={() => setReviewForm({...reviewForm, bias: 'SELL'})} className={`flex-1 py-2 text-sm font-bold ${reviewForm.bias === 'SELL' ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`}>SELL</button>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-gray-500 uppercase font-semibold mb-1">Entry Price</label>
+              <input type="number" step="0.00001" required value={reviewForm.entry} onChange={e => setReviewForm({...reviewForm, entry: e.target.value})} className="w-full bg-[#1e1e24] border border-gray-700 rounded px-3 py-2 text-gray-200 focus:outline-none focus:border-indigo-500" />
+            </div>
+            
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="block text-xs text-gray-500 uppercase font-semibold mb-1">Stop Loss</label>
+                <input type="number" step="0.00001" required value={reviewForm.sl} onChange={e => setReviewForm({...reviewForm, sl: e.target.value})} className="w-full bg-[#1e1e24] border border-gray-700 rounded px-3 py-2 text-gray-200 focus:outline-none focus:border-red-500" />
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs text-gray-500 uppercase font-semibold mb-1">Take Profit</label>
+                <input type="number" step="0.00001" required value={reviewForm.tp} onChange={e => setReviewForm({...reviewForm, tp: e.target.value})} className="w-full bg-[#1e1e24] border border-gray-700 rounded px-3 py-2 text-gray-200 focus:outline-none focus:border-green-500" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-gray-500 uppercase font-semibold mb-1">Capital Risk %</label>
+              <input type="number" step="0.1" required value={reviewForm.risk} onChange={e => setReviewForm({...reviewForm, risk: e.target.value})} className="w-full bg-[#1e1e24] border border-gray-700 rounded px-3 py-2 text-gray-200 focus:outline-none focus:border-indigo-500" />
+            </div>
+
+            <button disabled={isReviewing} type="submit" className="w-full mt-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded transition-colors flex justify-center items-center">
+              {isReviewing ? 'Analyzing...' : 'Run AI Analysis'}
+            </button>
+          </form>
+        </div>
+
+        {/* Right Col: AI Review Result */}
+        <div className="flex-1">
+          {!reviewResult ? (
+            <div className="h-full flex items-center justify-center border-2 border-dashed border-gray-800 rounded-lg text-gray-500">
+              Fill out your trade parameters to generate a mathematical AI review.
+            </div>
+          ) : reviewResult.error ? (
+            <div className="bg-red-900/30 border border-red-800 text-red-200 p-6 rounded-lg">
+              <h3 className="font-bold text-lg mb-2">Analysis Failed</h3>
+              <p>{reviewResult.error}</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              
+              <div className="flex items-center justify-between p-6 rounded-lg border border-gray-800 bg-gray-900 shadow-xl">
+                <div>
+                  <h3 className="text-gray-400 text-sm uppercase tracking-wider font-semibold">AI Safety Score</h3>
+                  <div className="text-5xl font-black mt-2" style={{ color: reviewResult.safety_score > 70 ? '#4ade80' : reviewResult.safety_score > 40 ? '#facc15' : '#f87171' }}>
+                    {reviewResult.safety_score} / 100
+                  </div>
+                </div>
+                <div className="text-right space-y-2">
+                  <div className="bg-gray-800 px-4 py-2 rounded">
+                    <span className="text-gray-400 text-sm">Risk/Reward</span>
+                    <div className="font-mono text-xl font-bold text-white">{reviewResult.rr_ratio} : 1</div>
+                  </div>
+                  <div className={`px-4 py-2 rounded border ${reviewResult.trend_alignment === 'Aligned' ? 'border-green-800 bg-green-900/20 text-green-400' : 'border-red-800 bg-red-900/20 text-red-400'}`}>
+                    <span className="text-sm font-bold uppercase">{reviewResult.trend_alignment}</span>
+                  </div>
+                </div>
+              </div>
+
+              {reviewResult.warnings && reviewResult.warnings.length > 0 && (
+                <div className="bg-[#1e1e24] border border-red-800 rounded-lg p-6">
+                  <h3 className="text-red-400 font-bold mb-3 flex items-center gap-2">⚠️ Critical AI Warnings</h3>
+                  <ul className="space-y-2 text-sm text-gray-300">
+                    {reviewResult.warnings.map((w: string, i: number) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="text-red-500 mt-0.5">•</span> {w}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {reviewResult.warnings && reviewResult.warnings.length === 0 && (
+                <div className="bg-[#1e1e24] border border-green-800 rounded-lg p-6 text-green-400 font-medium">
+                  ✅ Excellent setup! This trade aligns with macro trends and maintains a healthy risk profile.
+                </div>
+              )}
+
+              <button 
+                onClick={handleSaveTrade} 
+                disabled={isSavingTrade}
+                className="w-full bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-bold py-4 rounded-lg shadow-lg transition-colors flex justify-center items-center"
+              >
+                {isSavingTrade ? 'Saving...' : 'Approve & Execute Trade ->'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -330,7 +589,18 @@ function App() {
             <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
             AI Intelligence Core {isChatOpen ? '▼' : '▲'}
           </span>
-          {!isChatOpen && <span className="text-xs text-gray-500">Click to open</span>}
+          <div className="flex items-center gap-4">
+            {!isChatOpen && <span className="text-xs text-gray-500">Click to open</span>}
+            {isChatOpen && (
+              <button 
+                onClick={(e) => { e.stopPropagation(); setMessages([]); }}
+                className="text-xs text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700 transition-colors"
+                title="Clear Chat History"
+              >
+                Clear Chat
+              </button>
+            )}
+          </div>
         </div>
         
         {/* Chat Content - Only visible when open */}

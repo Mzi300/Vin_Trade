@@ -8,4 +8,5 @@ Route::middleware('api')->group(function () {
     Route::get('/forex', [App\Http\Controllers\ForexDataController::class, 'index']);
     Route::post('/analysis', [AnalysisController::class, 'analyze']);
     Route::get('/trending', [TradeRecommendationController::class, 'index']);
+    Route::get('/portfolio', [\App\Http\Controllers\PortfolioController::class, 'index']);
 });

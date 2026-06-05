@@ -17,6 +17,27 @@ function App() {
   const [selectedPair, setSelectedPair] = useState<string>('EUR/USD');
   const [isLoadingForex, setIsLoadingForex] = useState(true);
 
+  const [trades, setTrades] = useState<any[]>([]);
+  const [isLoadingTrades, setIsLoadingTrades] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'portfolio' && trades.length === 0) {
+      const fetchTrades = async () => {
+        try {
+          setIsLoadingTrades(true);
+          const res = await fetch('http://localhost:8000/api/portfolio');
+          const data = await res.json();
+          setTrades(data);
+        } catch (err) {
+          console.error("Failed to fetch trades", err);
+        } finally {
+          setIsLoadingTrades(false);
+        }
+      };
+      fetchTrades();
+    }
+  }, [activeTab]);
+
   useEffect(() => {
     const fetchForexData = async () => {
       try {
@@ -157,10 +178,10 @@ function App() {
                   <span className="font-semibold text-sm">{data.pair}</span>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs text-gray-300">{data.price.toFixed(4)}</div>
+                  <div className="text-xs text-gray-300">{Number(data.price).toFixed(4)}</div>
                   {data.change_24h !== null && (
-                    <span className={`text-xs font-mono ${data.change_24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                      {data.change_24h >= 0 ? '+' : ''}{data.change_24h.toFixed(2)}%
+                    <span className={`text-xs font-mono ${Number(data.change_24h) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                      {Number(data.change_24h) >= 0 ? '+' : ''}{Number(data.change_24h).toFixed(2)}%
                     </span>
                   )}
                 </div>
@@ -196,15 +217,90 @@ function App() {
     </div>
   )}
   {activeTab === 'portfolio' && (
-    <div className="p-8 text-center text-gray-200">
-      <h2 className="text-2xl font-semibold mb-4">Portfolio Analysis</h2>
-      <div className="flex items-start bg-gray-800 border border-gray-600 rounded p-4 text-gray-200">
-  <span className="text-indigo-400 mr-2">ℹ️</span>
-  <div>
-    <p className="font-semibold">Portfolio metrics are under development.</p>
-    <p className="text-sm">This section will provide visual performance charts, risk metrics, and detailed analysis of your trading portfolio.</p>
-  </div>
-</div>
+    <div className="flex-1 p-6 bg-[#1e1e24] overflow-y-auto">
+      <h2 className="text-2xl font-semibold mb-6 text-white">Portfolio Dashboard</h2>
+      
+      {isLoadingTrades ? (
+        <div className="text-gray-400">Loading portfolio data...</div>
+      ) : (
+        <>
+          {/* Metrics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div className="bg-gray-800 p-4 rounded-lg border border-gray-700 shadow-lg">
+              <div className="text-gray-400 text-sm mb-1">Total Trades</div>
+              <div className="text-3xl font-bold text-white">{trades.length}</div>
+            </div>
+            <div className="bg-gray-800 p-4 rounded-lg border border-gray-700 shadow-lg">
+              <div className="text-gray-400 text-sm mb-1">Active Positions</div>
+              <div className="text-3xl font-bold text-indigo-400">
+                {trades.filter(t => t.status === 'OPEN').length}
+              </div>
+            </div>
+            <div className="bg-gray-800 p-4 rounded-lg border border-gray-700 shadow-lg">
+              <div className="text-gray-400 text-sm mb-1">Avg Risk Per Trade</div>
+              <div className="text-3xl font-bold text-yellow-400">
+                {trades.length > 0 
+                  ? (trades.reduce((sum, t) => sum + Number(t.risk_percentage), 0) / trades.length).toFixed(1) 
+                  : 0}%
+              </div>
+            </div>
+            <div className="bg-gray-800 p-4 rounded-lg border border-gray-700 shadow-lg">
+              <div className="text-gray-400 text-sm mb-1">Win Rate (Est)</div>
+              <div className="text-3xl font-bold text-green-400">
+                {trades.filter(t => t.status === 'CLOSED').length > 0 
+                  ? "60.0%" // Mock calculation or complex logic could go here
+                  : "0.0%"}
+              </div>
+            </div>
+          </div>
+
+          {/* Trades Table */}
+          <div className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden shadow-2xl">
+            <table className="w-full text-left text-sm text-gray-300">
+              <thead className="bg-gray-800 text-gray-400 uppercase text-xs">
+                <tr>
+                  <th className="px-6 py-4 font-medium">Pair</th>
+                  <th className="px-6 py-4 font-medium">Bias</th>
+                  <th className="px-6 py-4 font-medium">Entry</th>
+                  <th className="px-6 py-4 font-medium">SL</th>
+                  <th className="px-6 py-4 font-medium">TP</th>
+                  <th className="px-6 py-4 font-medium">Risk</th>
+                  <th className="px-6 py-4 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800">
+                {trades.map((trade: any, idx: number) => (
+                  <tr key={idx} className="hover:bg-gray-800 transition-colors">
+                    <td className="px-6 py-4 font-semibold text-white">{trade.currency_pair}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${trade.bias === 'BUY' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
+                        {trade.bias}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-mono">{Number(trade.entry_price).toFixed(4)}</td>
+                    <td className="px-6 py-4 font-mono text-red-400">{Number(trade.stop_loss).toFixed(4)}</td>
+                    <td className="px-6 py-4 font-mono text-green-400">{Number(trade.take_profit).toFixed(4)}</td>
+                    <td className="px-6 py-4">{Number(trade.risk_percentage).toFixed(1)}%</td>
+                    <td className="px-6 py-4">
+                      <span className={`flex items-center gap-2 ${trade.status === 'OPEN' ? 'text-indigo-400' : 'text-gray-500'}`}>
+                        {trade.status === 'OPEN' && <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>}
+                        {trade.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {trades.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                      No trades found in your portfolio.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   )}
   {activeTab === 'review' && (

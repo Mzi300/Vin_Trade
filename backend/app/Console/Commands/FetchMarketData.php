@@ -39,10 +39,18 @@ class FetchMarketData extends Command
             }
 
             foreach ($quotes as $quote) {
+                $this->info("Fetching Technical Indicators for {$quote['pair']}...");
+                $rsi = $forexService->fetchRSI($quote['pair']);
+                sleep(8); // TwelveData free tier rate limit: 8 requests per minute
+                $macd = $forexService->fetchMACD($quote['pair']);
+                sleep(8);
+
                 ForexPrice::create([
                     'pair'       => $quote['pair'],
                     'price'      => $quote['price'],
                     'change_24h' => $quote['change_24h'] ?? null,
+                    'rsi'        => $rsi,
+                    'macd'       => $macd,
                     'source'     => $quote['source'],
                     'timestamp'  => $quote['timestamp'],
                 ]);

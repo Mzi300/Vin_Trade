@@ -36,21 +36,44 @@ class TradeRecommendationService
         $currentPrice = $latestPriceRecord ? (float) $latestPriceRecord->price : 1.1000;
         $change24h = $latestPriceRecord ? (float) $latestPriceRecord->change_24h : 0.05;
 
-        // Dynamic Bias based on recent momentum (change_24h)
-        if ($change24h > 0.1) {
+        $rsi = $latestPriceRecord ? $latestPriceRecord->rsi : null;
+        $macd = $latestPriceRecord ? $latestPriceRecord->macd : null;
+
+        $indicatorText = "";
+        if ($rsi !== null) {
+            $indicatorText .= " RSI is at " . number_format((float)$rsi, 1) . ".";
+        }
+        if ($macd !== null) {
+            $macdState = (float)$macd > 0 ? "bullish" : "bearish";
+            $indicatorText .= " MACD is $macdState (" . number_format((float)$macd, 4) . ").";
+        }
+
+        $isOversold = ($rsi !== null && $rsi < 35);
+        $isOverbought = ($rsi !== null && $rsi > 65);
+
+        // Dynamic Bias based on recent momentum (change_24h) and Technicals
+        if ($change24h > 0.05 || $isOversold) {
             $bias = 'BUY';
             $strengthScore = 80 + min(20, abs($change24h) * 10);
-            $reasoning = "The $pair shows strong bullish momentum over the last 24 hours, breaking recent resistance levels. Macro data indicates a positive outlook for the base currency.";
+            if ($isOversold) {
+                $reasoning = "The $pair is currently showing Oversold conditions with RSI at " . number_format((float)$rsi, 1) . ". Coupled with momentum factors, this indicates a high probability of a bullish reversal or bounce.";
+            } else {
+                $reasoning = "The $pair shows strong bullish momentum over the last 24 hours. Technicals confirm the trend" . ($indicatorText ? " with$indicatorText" : "") . ". Macro data indicates a positive outlook.";
+            }
             $risks = "A sudden reversal in momentum or unexpected central bank announcements could invalidate this bullish setup. High volatility during overlapping trading sessions.";
-        } elseif ($change24h < -0.1) {
+        } elseif ($change24h < -0.05 || $isOverbought) {
             $bias = 'SELL';
             $strengthScore = 80 + min(20, abs($change24h) * 10);
-            $reasoning = "The $pair shows significant bearish pressure, steadily creating lower lows. The market is pricing in weakness for the base currency.";
+            if ($isOverbought) {
+                $reasoning = "The $pair is Overbought with RSI at " . number_format((float)$rsi, 1) . ". This suggests the bullish run may be exhausted, creating a strong shorting opportunity" . ($macd !== null ? " (MACD: " . number_format((float)$macd, 4) . ")." : ".");
+            } else {
+                $reasoning = "The $pair shows significant bearish pressure, steadily creating lower lows" . ($indicatorText ? ". Technicals show$indicatorText" : "") . ". The market is pricing in weakness.";
+            }
             $risks = "Oversold conditions could lead to a sharp, unexpected 'dead cat bounce'. Caution is required ahead of major economic calendar releases.";
         } else {
             $bias = 'NEUTRAL';
             $strengthScore = 50;
-            $reasoning = "The $pair is currently ranging with low volatility. No clear directional breakout has been established yet.";
+            $reasoning = "The $pair is currently ranging with low volatility. No clear directional breakout has been established yet" . ($indicatorText ? ". Technicals:$indicatorText" : "") . ".";
             $risks = "Ranging markets often trigger 'whipsaws' which can stop out tight positions. It is recommended to wait for a clear breakout before committing capital.";
         }
 

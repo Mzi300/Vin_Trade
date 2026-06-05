@@ -171,6 +171,52 @@ class ForexDataService
         return $this->normalizeResult($pair, $price, 'alpha_vantage', $timestamp);
     }
 
+    // ─── Technical Indicators ─────────────────────────────────────────
+
+    public function fetchRSI(string $pair): ?float
+    {
+        $apiKey = config('services.twelve_data.key');
+        if (empty($apiKey)) return null;
+
+        try {
+            $response = Http::timeout($this->timeout)
+                ->get('https://api.twelvedata.com/rsi', [
+                    'symbol' => $pair,
+                    'interval' => '1day',
+                    'apikey' => $apiKey,
+                ]);
+            $json = $response->json();
+            if (isset($json['values'][0]['rsi'])) {
+                return (float) $json['values'][0]['rsi'];
+            }
+        } catch (\Exception $e) {
+            Log::warning("RSI fetch failed for {$pair}: " . $e->getMessage());
+        }
+        return null;
+    }
+
+    public function fetchMACD(string $pair): ?float
+    {
+        $apiKey = config('services.twelve_data.key');
+        if (empty($apiKey)) return null;
+
+        try {
+            $response = Http::timeout($this->timeout)
+                ->get('https://api.twelvedata.com/macd', [
+                    'symbol' => $pair,
+                    'interval' => '1day',
+                    'apikey' => $apiKey,
+                ]);
+            $json = $response->json();
+            if (isset($json['values'][0]['macd'])) {
+                return (float) $json['values'][0]['macd'];
+            }
+        } catch (\Exception $e) {
+            Log::warning("MACD fetch failed for {$pair}: " . $e->getMessage());
+        }
+        return null;
+    }
+
     // ─── Helpers ──────────────────────────────────────────────────────
 
     protected function normalizeResult(string $pair, float $price, string $source, ?int $timestamp = null): array
@@ -179,6 +225,8 @@ class ForexDataService
             'pair'       => $pair,
             'price'      => $price,
             'change_24h' => null,
+            'rsi'        => null,
+            'macd'       => null,
             'timestamp'  => $timestamp ?? Carbon::now()->timestamp,
             'source'     => $source,
         ];

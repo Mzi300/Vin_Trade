@@ -18,7 +18,7 @@ class ForexDataController extends Controller
         
         try {
             $query = ForexPrice::query()
-                ->select('pair', 'price', 'change_24h', 'timestamp', 'source')
+                ->select('pair', 'price', 'change_24h', 'rsi', 'macd', 'timestamp', 'source')
                 ->whereIn('id', function($q) {
                     $q->selectRaw('MAX(id)')
                       ->from('forex_prices')

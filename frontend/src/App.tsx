@@ -59,6 +59,16 @@ function App() {
   const [reviewResult, setReviewResult] = useState<any>(null);
   const [isReviewing, setIsReviewing] = useState(false);
   const [isSavingTrade, setIsSavingTrade] = useState(false);
+  const [chartKey, setChartKey] = useState(0);
+
+  const [notifications, setNotifications] = useState<{id: string, message: string, type: 'success' | 'error' | 'info', time: Date}[]>([]);
+  const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
+  const [lastFetchTime, setLastFetchTime] = useState(Date.now());
+  const [hasNotifiedStale, setHasNotifiedStale] = useState(false);
+
+  const addNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setNotifications(prev => [{ id: Math.random().toString(), message, type, time: new Date() }, ...prev]);
+  };
 
   const handleReviewTrade = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,6 +110,7 @@ function App() {
       });
       setTrades([]); // clear cache to refetch
       setActiveTab('portfolio');
+      addNotification('Trade successfully added to Portfolio!', 'success');
     } catch (err) {
       console.error(err);
     } finally {
@@ -133,6 +144,8 @@ function App() {
         const res = await fetchWithAuth('http://localhost:8000/api/forex');
         const data = await res.json();
         setForexData(data);
+        setLastFetchTime(Date.now());
+        setHasNotifiedStale(false);
       } catch (err) {
         console.error("Failed to fetch forex data", err);
       } finally {
@@ -142,6 +155,15 @@ function App() {
     fetchForexData();
   }, []);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!hasNotifiedStale && Date.now() - lastFetchTime > 5 * 60 * 1000) {
+        addNotification("Market data is over 5 minutes old. Click Refresh (↻) to get the latest prices.", "error");
+        setHasNotifiedStale(true);
+      }
+    }, 10000); // Check every 10 seconds
+    return () => clearInterval(interval);
+  }, [lastFetchTime, hasNotifiedStale]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -208,6 +230,9 @@ function App() {
         const res = await fetchWithAuth('http://localhost:8000/api/forex');
         const data = await res.json();
         setForexData(data);
+        setLastFetchTime(Date.now());
+        setHasNotifiedStale(false);
+        addNotification('Live market data refreshed', 'success');
       } catch (err) { console.error(err); } finally { setIsLoadingForex(false); }
     } else if (activeTab === 'portfolio') {
       try {
@@ -215,6 +240,7 @@ function App() {
         const res = await fetchWithAuth('http://localhost:8000/api/portfolio');
         const data = await res.json();
         setTrades(data);
+        addNotification('Portfolio data refreshed', 'success');
       } catch (err) { console.error(err); } finally { setIsLoadingTrades(false); }
     }
   };
@@ -225,6 +251,7 @@ function App() {
       e.preventDefault();
       localStorage.setItem('admin_key', adminKey);
       setIsAuthenticated(true);
+      addNotification('Terminal unlocked successfully', 'success');
     };
 
     return (
@@ -256,7 +283,7 @@ function App() {
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#1e1e24] text-gray-200 font-sans overflow-hidden">
+    <div className="h-screen w-screen flex flex-col bg-[#1e1e24] text-gray-200 font-sans overflow-hidden relative">
       {/* Browser-style Top Tabs & Navbar */}
       <header className="bg-gray-900 border-b border-gray-800 shrink-0">
         {/* Fake Browser Tabs */}
@@ -293,6 +320,42 @@ function App() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <div className="relative">
+              <button onClick={() => setIsNotificationPanelOpen(!isNotificationPanelOpen)} className="hover:text-white transition-colors cursor-pointer text-gray-400 relative flex items-center justify-center w-8 h-8 rounded hover:bg-gray-800" title="Notifications">
+                🔔
+                {notifications.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                    {notifications.length}
+                  </span>
+                )}
+              </button>
+              {isNotificationPanelOpen && (
+                <div className="absolute top-10 right-0 w-80 bg-gray-900 border border-gray-700 shadow-2xl rounded-lg overflow-hidden z-50">
+                  <div className="p-3 border-b border-gray-800 flex justify-between items-center bg-gray-800">
+                    <h3 className="font-bold text-gray-200">Notifications</h3>
+                    {notifications.length > 0 && (
+                      <button onClick={() => setNotifications([])} className="text-xs text-indigo-400 hover:text-indigo-300">Clear All</button>
+                    )}
+                  </div>
+                  <div className="max-h-96 overflow-y-auto p-2">
+                    {notifications.length === 0 ? (
+                      <div className="text-center text-gray-500 py-4 text-sm">No new notifications</div>
+                    ) : (
+                      notifications.map(n => (
+                        <div key={n.id} className="p-3 mb-2 rounded bg-gray-800 border border-gray-700 flex items-start gap-3 relative">
+                          <div className="mt-0.5">{n.type === 'success' ? '✅' : n.type === 'error' ? '⚠️' : 'ℹ️'}</div>
+                          <div>
+                            <div className="text-sm text-gray-200 pr-4">{n.message}</div>
+                            <div className="text-xs text-gray-500 mt-1">{n.time.toLocaleTimeString()}</div>
+                          </div>
+                          <button onClick={() => setNotifications(prev => prev.filter(x => x.id !== n.id))} className="absolute top-2 right-2 text-gray-500 hover:text-gray-300 text-xs">✕</button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="text-xs text-gray-400 font-mono">
               v1.0.0 | <span className="text-green-500">Connected</span>
             </div>
@@ -325,11 +388,18 @@ function App() {
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-gray-300">{Number(data.price).toFixed(4)}</div>
-                  {data.change_24h !== null && (
-                    <span className={`text-xs font-mono ${Number(data.change_24h) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                      {Number(data.change_24h) >= 0 ? '+' : ''}{Number(data.change_24h).toFixed(2)}%
-                    </span>
-                  )}
+                  <div className="flex justify-end items-center gap-2 mt-1">
+                    {data.change_24h !== null && (
+                      <span className={`text-xs font-mono ${Number(data.change_24h) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        {Number(data.change_24h) >= 0 ? '+' : ''}{Number(data.change_24h).toFixed(2)}%
+                      </span>
+                    )}
+                    {data.rsi !== null && data.rsi !== undefined && (
+                      <span className={`px-1 rounded text-[10px] font-bold ${Number(data.rsi) > 65 ? 'bg-red-900/50 text-red-300' : Number(data.rsi) < 35 ? 'bg-green-900/50 text-green-300' : 'bg-gray-800 text-gray-400'}`}>
+                        RSI: {Number(data.rsi).toFixed(1)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             ))
@@ -345,9 +415,19 @@ function App() {
             <span className="text-xs text-gray-500 px-2 py-0.5 bg-gray-800 rounded">1D</span>
             <span className="text-xs text-gray-500 px-2 py-0.5 bg-gray-800 rounded">1W</span>
           </div>
+          <div>
+            <button 
+              onClick={() => setChartKey(prev => prev + 1)}
+              className="text-xs text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700 transition-colors"
+              title="Reset Chart Zoom"
+            >
+              Reset Chart
+            </button>
+          </div>
         </div>
         <div className="absolute inset-0 top-10">
           <AdvancedRealTimeChart
+            key={`${selectedPair}-${chartKey}`}
             symbol={`FX:${selectedPair.replace('/', '')}`}
             theme="dark"
             autosize
